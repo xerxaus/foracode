@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>İnteraktif Modül Yöneticisi</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f4f7f6; color: #333; display: flex; gap: 20px; }
+        .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); flex: 1; }
+        .preview-panel { flex: 2; display: flex; flex-direction: column; }
+        h2 { margin-top: 0; font-size: 1.2rem; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        input[type="file"] { margin-bottom: 10px; }
+        button { background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #2980b9; }
+        button.delete-btn { background: #e74c3c; padding: 5px 10px; font-size: 0.8rem; }
+        .file-list { list-style: none; padding: 0; }
+        .file-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f9f9f9; margin-bottom: 5px; border-radius: 5px; cursor: pointer; }
+        .file-list li:hover { background: #eef2f5; }
+        
+        /* Zihin Haritası Kutusu Simülasyonu */
+        .demo-box { border: 2px dashed #95a5a6; padding: 10px; border-radius: 8px; background: #fff; height: 500px; display: flex; flex-direction: column; }
+        iframe { width: 100%; height: 100%; border: none; border-radius: 5px; background: #fafafa; }
+        
+        .code-block { background: #2d3436; color: #00b894; padding: 15px; border-radius: 5px; font-family: monospace; margin-top: 15px; position: relative; word-break: break-all; }
+        .copy-btn { position: absolute; top: 10px; right: 10px; background: #00b894; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+
+    <!-- Sol Panel: Yükleme ve Yönetim -->
+    <div class="panel">
+        <h2>📂 Paket Yükle (Articulate / Lumi)</h2>
+        <form id="uploadForm">
+            <input type="file" id="fileInput" accept=".zip" required>
+            <button type="submit">Paketi Yükle</button>
+        </form>
+
+        <h2 style="margin-top: 30px;">📋 Yüklenen Modüller</h2>
+        <ul class="file-list" id="fileList">
+            <!-- Dosyalar buraya JavaScript ile gelecek -->
+        </ul>
+    </div>
+
+    <!-- Sağ Panel: Demo ve Kod Üretimi -->
+    <div class="panel preview-panel">
+        <h2>👁️ Demo Ekranı (Zihin Haritası Kutu Görünümü)</h2>
+        <p style="font-size: 0.9rem; color: #7f8c8d;">İçerik, platformunuzdaki kutuların içinde tam olarak böyle görünecektir.</p>
+        
+        <div class="demo-box">
+            <iframe id="previewFrame" src="about:blank" title="Demo Preview"></iframe>
+        </div>
+
+        <div class="code-block" id="embedCodeContainer" style="display: none;">
+            <code id="embedCode"></code>
+            <button class="copy-btn" onclick="copyCode()">Kopyala</button>
+        </div>
+    </div>
+
+    <script>
+        const baseUrl = window.location.origin;
+
+        // Dosya listesini getir
+        async function loadFiles() {
+            const res = await fetch('/files');
+            const files = await res.json();
+            const list = document.getElementById('fileList');
+            list.innerHTML = '';
+            
+            files.forEach(file => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span onclick="previewFile('${file}')">${file}</span>
+                    <button class="delete-btn" onclick="deleteFile('${file}')">Sil</button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // Önizleme ve Kod Üretimi
+        function previewFile(folder) {
+            // Articulate ve Lumi'nin olası ana dosyalarını test ederek iframe'e veriyoruz
+            // Sunucu asıl URL'yi upload sırasında belirliyor ama yönetim panelinden tıklayınca index/story kontrolü yapılır:
+            const frameUrl = `${baseUrl}/uploads/${folder}/story.html`; // Varsayılan Articulate
+            const fallbackUrl = `${baseUrl}/uploads/${folder}/index.html`; // Varsayılan Lumi/HTML5
+            
+            const iframe = document.getElementById('previewFrame');
+            // Geçerli dosyayı bulmak için basit bir numara: iframe src'sini fallback ile başlat, hata verirse diğerini dene.
+            // Bu basit versiyonda index.html üzerinden ilerleyeceğiz. Genelde ana dosyadır.
+            iframe.src = fallbackUrl; 
+            
+            const embedString = `<iframe src="${fallbackUrl}" width="100%" height="400" style="border:none; border-radius:8px;" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>`;
+            
+            document.getElementById('embedCode').textContent = embedString;
+            document.getElementById('embedCodeContainer').style.display = 'block';
+        }
+
+        // Dosya Silme
+        async function deleteFile(folder) {
+            if(confirm('Bu modülü silmek istediğinize emin misiniz? (Zihin haritalarındaki mevcut kodlar bozulabilir)')) {
+                await fetch(`/delete/${folder}`, { method: 'DELETE' });
+                loadFiles();
+                document.getElementById('previewFrame').src = 'about:blank';
+                document.getElementById('embedCodeContainer').style.display = 'none';
+            }
+        }
+
+        // Yükleme İşlemi
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('package', document.getElementById('fileInput').files[0]);
+            
+            const btn = e.target.querySelector('button');
+            btn.textContent = 'Yükleniyor...';
+            
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            if(data.success) {
+                alert('Başarıyla yüklendi ve çıkartıldı!');
+                document.getElementById('fileInput').value = '';
+                loadFiles();
+                previewFile(data.folder);
+            }
+            btn.textContent = 'Paketi Yükle';
+        };
+
+        // Kodu Kopyala
+        function copyCode() {
+            navigator.clipboard.writeText(document.getElementById('embedCode').textContent);
+            alert('iFrame kodu kopyalandı! Zihin haritası kutusuna yapıştırabilirsiniz.');
+        }
+
+        // Başlangıçta dosyaları yükle
+        loadFiles();
+    </script>
+</body>
+</html>
