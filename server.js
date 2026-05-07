@@ -6,7 +6,9 @@ const path = require('path');
 const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
+
+// BULUT GÜNCELLEMESİ: Render'ın kendi atadığı portu kullan, bulamazsa 3000'i kullan
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.static('public')); // Ön yüz dosyaları için
@@ -21,7 +23,12 @@ if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir);
 // Multer (Zip yükleme) ayarları
 const upload = multer({ dest: 'temp_uploads/' });
 
-// 1. ZIP Yükleme ve Çıkarma Endpoint'i
+// HATA AYIKLAMA İÇİN EKLENDİ: Eğer public klasörü yanlış yerdeyse "Not Found" yerine bu çıkacak
+app.get('/', (req, res) => {
+    res.send("<h1>Sunucu Arka Planda Harika Çalışıyor! 🚀</h1><p>Ancak <b>public</b> klasörü veya içindeki <b>index.html</b> dosyası bulunamadı. Lütfen GitHub deponda 'public' adında bir klasör olduğundan emin ol.</p>");
+});
+
+// ZIP Yükleme ve Çıkarma
 app.post('/upload', upload.single('package'), (req, res) => {
     if (!req.file) return res.status(400).send('Dosya yüklenmedi.');
 
@@ -32,7 +39,6 @@ app.post('/upload', upload.single('package'), (req, res) => {
         const zip = new AdmZip(req.file.path);
         zip.extractAllTo(targetPath, true);
         
-        // Ana dosyayı bul (Articulate için story.html, Lumi/H5P için index.html vb.)
         let mainFile = 'index.html';
         if (fs.existsSync(path.join(targetPath, 'story.html'))) {
             mainFile = 'story.html';
@@ -40,7 +46,6 @@ app.post('/upload', upload.single('package'), (req, res) => {
             mainFile = 'index_lms.html';
         }
 
-        // Geçici zip dosyasını sil
         fs.unlinkSync(req.file.path);
 
         res.json({
@@ -53,15 +58,16 @@ app.post('/upload', upload.single('package'), (req, res) => {
     }
 });
 
-// 2. Yüklenen Paketleri Listeleme (Yönetim için)
+// Yüklenen Paketleri Listeleme
 app.get('/files', (req, res) => {
+    if (!fs.existsSync(extractDir)) return res.json([]);
     fs.readdir(extractDir, (err, files) => {
         if (err) return res.status(500).send('Dizin okunamadı.');
         res.json(files);
     });
 });
 
-// 3. Paket Silme
+// Paket Silme
 app.delete('/delete/:folderName', (req, res) => {
     const folderPath = path.join(extractDir, req.params.folderName);
     if (fs.existsSync(folderPath)) {
@@ -73,5 +79,5 @@ app.delete('/delete/:folderName', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Sunucu çalışıyor: http://localhost:${PORT}`);
+    console.log(`Sunucu çalışıyor: Port ${PORT}`);
 });
